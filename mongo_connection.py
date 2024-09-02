@@ -1,6 +1,6 @@
 from pymongo import MongoClient
 
-def get_mongo_client(uri="mongodb://192.168.0.5:27017/"):
+def get_mongo_client(uri="mongodb://localhost:27017/"):
     client = MongoClient(uri)
     return client
 
@@ -11,6 +11,6 @@ def get_collection(db, collection_name):
     return db[collection_name]
 
 # Exemplo de uso:
-# client = get_mongo_client()
-# db = get_database(client)
-# collection = get_collection(db, "nome_da_colecao")
+client = get_mongo_client()
+db = get_database(client)
+collection = get_collection(db, "dadosabertos_collection")
