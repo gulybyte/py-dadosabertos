@@ -43,7 +43,7 @@ def process_single_csv(csv_file_path):
         else:
             print(f"Não foram encontradas duplicações no arquivo {os.path.basename(csv_file_path)}.")
 
-def process_estabelecimentos(category_folder_path, db):
+def verify_duplications_estabelecimentos(category_folder_path):
     # Obter todos os arquivos CSV na pasta da categoria, em ordem alfabética
     csv_files = sorted([os.path.join(category_folder_path, f) for f in os.listdir(category_folder_path) if f.endswith('.csv')])
 
@@ -52,4 +52,4 @@ def process_estabelecimentos(category_folder_path, db):
         process_single_csv(csv_file)
 
 # Exemplo de uso:
-# process_estabelecimentos("/caminho/para/a/pasta/categoria")
+# verify_duplications_estabelecimentos("/caminho/para/a/pasta/categoria")
