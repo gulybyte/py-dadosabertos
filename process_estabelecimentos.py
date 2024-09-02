@@ -9,14 +9,20 @@ def process_single_csv(csv_file_path, db):
     print(f"Lendo arquivo {csv_file_path}...")
 
     # Contar o número de linhas no arquivo para a barra de progresso
-    total_lines = sum(1 for line in open(csv_file_path, mode='r', encoding='ISO-8859-1', errors='ignore'))
-    
-    # Abrir o CSV sem cabeçalho e mapear campos por posição
+    total_lines = 0
     with open(csv_file_path, mode='r', encoding='ISO-8859-1', errors='ignore') as file:
-        reader = csv.reader(file, delimiter=';')
+        total_lines = sum(1 for _ in file)
+    
+    # Processar o arquivo CSV
+    with open(csv_file_path, mode='r', encoding='ISO-8859-1', errors='ignore') as file:
+        reader = csv.reader((line.replace('\0', '') for line in file), delimiter=';')
         progress_bar = tqdm(total=total_lines, desc=f"Processando {os.path.basename(csv_file_path)}", position=csv_files.index(csv_file_path))
 
+        documents_to_insert = []
         for row in reader:
+            if not row:
+                continue
+
             # Mapear os campos conforme as posições especificadas no CSV
             cnpj_basico = row[0].strip()  # CNPJ Básico (posição 0)
             cnpj_ordem = row[1].strip()  # CNPJ Ordem (posição 1)
@@ -51,42 +57,51 @@ def process_single_csv(csv_file_path, db):
 
             # Verificar se os campos principais não estão vazios ou nulos
             if cnpj_basico and cnpj_ordem and cnpj_dv:
-                # Verificar se o estabelecimento já existe no MongoDB
-                if collection.find_one({"cnpj_basico": cnpj_basico, "cnpj_ordem": cnpj_ordem, "cnpj_dv": cnpj_dv}) is None:
-                    document = {
-                        "cnpj_basico": cnpj_basico,
-                        "cnpj_ordem": cnpj_ordem,
-                        "cnpj_dv": cnpj_dv,
-                        "identificador_matriz_filial": identificador_matriz_filial,
-                        "nome_fantasia": nome_fantasia,
-                        "situacao_cadastral": situacao_cadastral,
-                        "data_situacao_cadastral": data_situacao_cadastral,
-                        "motivo_situacao_cadastral": motivo_situacao_cadastral,
-                        "nome_cidade_exterior": nome_cidade_exterior,
-                        "pais": pais,
-                        "data_inicio_atividade": data_inicio_atividade,
-                        "cnae_fiscal_principal": cnae_fiscal_principal,
-                        "cnae_fiscal_secundario": cnae_fiscal_secundario,
-                        "tipo_logradouro": tipo_logradouro,
-                        "logradouro": logradouro,
-                        "numero": numero,
-                        "complemento": complemento,
-                        "bairro": bairro,
-                        "cep": cep,
-                        "uf": uf,
-                        "municipio": municipio,
-                        "ddd_1": ddd_1,
-                        "telefone_1": telefone_1,
-                        "ddd_2": ddd_2,
-                        "telefone_2": telefone_2,
-                        "ddd_fax": ddd_fax,
-                        "fax": fax,
-                        "email": email,
-                        "situacao_especial": situacao_especial,
-                        "data_situacao_especial": data_situacao_especial,
-                    }
-                    collection.insert_one(document)
+                # Adicionar documento para inserção em massa
+                documents_to_insert.append({
+                    "cnpj_basico": cnpj_basico,
+                    "cnpj_ordem": cnpj_ordem,
+                    "cnpj_dv": cnpj_dv,
+                    "identificador_matriz_filial": identificador_matriz_filial,
+                    "nome_fantasia": nome_fantasia,
+                    "situacao_cadastral": situacao_cadastral,
+                    "data_situacao_cadastral": data_situacao_cadastral,
+                    "motivo_situacao_cadastral": motivo_situacao_cadastral,
+                    "nome_cidade_exterior": nome_cidade_exterior,
+                    "pais": pais,
+                    "data_inicio_atividade": data_inicio_atividade,
+                    "cnae_fiscal_principal": cnae_fiscal_principal,
+                    "cnae_fiscal_secundario": cnae_fiscal_secundario,
+                    "tipo_logradouro": tipo_logradouro,
+                    "logradouro": logradouro,
+                    "numero": numero,
+                    "complemento": complemento,
+                    "bairro": bairro,
+                    "cep": cep,
+                    "uf": uf,
+                    "municipio": municipio,
+                    "ddd_1": ddd_1,
+                    "telefone_1": telefone_1,
+                    "ddd_2": ddd_2,
+                    "telefone_2": telefone_2,
+                    "ddd_fax": ddd_fax,
+                    "fax": fax,
+                    "email": email,
+                    "situacao_especial": situacao_especial,
+                    "data_situacao_especial": data_situacao_especial,
+                })
+
+                # Inserir documentos em massa quando atingir o limite
+                if len(documents_to_insert) >= 1000:
+                    collection.insert_many(documents_to_insert)
+                    documents_to_insert.clear()
+
             progress_bar.update(1)
+        
+        # Inserir quaisquer documentos restantes
+        if documents_to_insert:
+            collection.insert_many(documents_to_insert)
+        
         progress_bar.close()
 
 def process_estabelecimentos(category_folder_path, db):
@@ -94,9 +109,10 @@ def process_estabelecimentos(category_folder_path, db):
     global csv_files
     csv_files = sorted([os.path.join(category_folder_path, f) for f in os.listdir(category_folder_path) if f.endswith('.csv')])
 
-    # Processar arquivos CSV em paralelo
-    with ThreadPoolExecutor() as executor:
-        executor.map(lambda csv_file: process_single_csv(csv_file, db), csv_files)
+    # Processar arquivos CSV em paralelo com um número específico de threads
+    num_threads = min(32, len(csv_files))  # Ajuste o número de threads conforme necessário
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        list(executor.map(lambda csv_file: process_single_csv(csv_file, db), csv_files))
 
 # Exemplo de uso:
 # client = get_mongo_client()

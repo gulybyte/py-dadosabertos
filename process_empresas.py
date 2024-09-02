@@ -9,15 +9,20 @@ def process_single_csv(csv_file_path, db):
     print(f"Lendo arquivo {csv_file_path}...")
 
     # Contar o número de linhas no arquivo para a barra de progresso
-    total_lines = sum(1 for line in open(csv_file_path, mode='r', encoding='ISO-8859-1', errors='ignore'))
-    
-    # Abrir o CSV sem cabeçalho e mapear campos por posição
+    total_lines = 0
     with open(csv_file_path, mode='r', encoding='ISO-8859-1', errors='ignore') as file:
-        reader = csv.reader(file, delimiter=';')
+        total_lines = sum(1 for _ in file)
+    
+    # Processar o arquivo CSV
+    with open(csv_file_path, mode='r', encoding='ISO-8859-1', errors='ignore') as file:
+        reader = csv.reader((line.replace('\0', '') for line in file), delimiter=';')
         progress_bar = tqdm(total=total_lines, desc=f"Processando {os.path.basename(csv_file_path)}", position=csv_files.index(csv_file_path))
 
+        documents_to_insert = []
         for row in reader:
-            # Mapear os campos conforme as posições especificadas no CSV
+            if not row:
+                continue
+
             cnpj_basico = row[0].strip()  # CNPJ Básico (posição 0)
             razao_social = row[1].strip()  # Razão Social (posição 1)
             natureza_juridica = row[2].strip()  # Natureza Jurídica (posição 2)
@@ -28,29 +33,38 @@ def process_single_csv(csv_file_path, db):
 
             # Verificar se os campos principais não estão vazios ou nulos
             if cnpj_basico and razao_social:
-                # Verificar se o CNPJ Básico já existe no MongoDB
-                if collection.find_one({"cnpj_basico": cnpj_basico}) is None:
-                    document = {
-                        "cnpj_basico": cnpj_basico,
-                        "razao_social": razao_social,
-                        "natureza_juridica": natureza_juridica,
-                        "qualificacao_responsavel": qualificacao_responsavel,
-                        "capital_social": float(capital_social),  # Converter capital social para número
-                        "porte": porte,
-                        "ente_federativo_responsavel": ente_federativo_responsavel
-                    }
-                    collection.insert_one(document)
+                # Adicionar documento para inserção em massa
+                documents_to_insert.append({
+                    "cnpj_basico": cnpj_basico,
+                    "razao_social": razao_social,
+                    "natureza_juridica": natureza_juridica,
+                    "qualificacao_responsavel": qualificacao_responsavel,
+                    "capital_social": float(capital_social),  # Converter capital social para número
+                    "porte": porte,
+                    "ente_federativo_responsavel": ente_federativo_responsavel
+                })
+
+                # Inserir documentos em massa quando atingir o limite
+                if len(documents_to_insert) >= 1000:
+                    collection.insert_many(documents_to_insert)
+                    documents_to_insert.clear()
+
             progress_bar.update(1)
+        
+        # Inserir quaisquer documentos restantes
+        if documents_to_insert:
+            collection.insert_many(documents_to_insert)
+        
         progress_bar.close()
 
 def process_empresas(category_folder_path, db):
-    # Obter todos os arquivos CSV na pasta da categoria, em ordem alfabética
     global csv_files
     csv_files = sorted([os.path.join(category_folder_path, f) for f in os.listdir(category_folder_path) if f.endswith('.csv')])
 
-    # Processar arquivos CSV em paralelo
-    with ThreadPoolExecutor() as executor:
-        executor.map(lambda csv_file: process_single_csv(csv_file, db), csv_files)
+    # Processar arquivos CSV em paralelo com um número específico de threads
+    num_threads = min(32, len(csv_files))  # Ajuste o número de threads conforme necessário
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        list(executor.map(lambda csv_file: process_single_csv(csv_file, db), csv_files))
 
 # Exemplo de uso:
 # client = get_mongo_client()
