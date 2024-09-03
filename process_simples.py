@@ -34,8 +34,12 @@ def process_single_csv_simples(csv_file_path, db):
 
             # Verificar se os campos principais não estão vazios ou nulos
             if cnpj_basico:
+                # Criar a chave primária única usando o cnpj_basico
+                primary_key = cnpj_basico
+
                 # Adicionar documento para inserção em massa
                 documents_to_insert.append({
+                    "_id": primary_key,  # Definir a chave primária
                     "cnpj_basico": cnpj_basico,
                     "opcao_pelo_simples": opcao_pelo_simples,
                     "data_opcao_simples": data_opcao_simples,
@@ -64,7 +68,7 @@ def process_simples(category_folder_path, db):
     csv_files = sorted([os.path.join(category_folder_path, f) for f in os.listdir(category_folder_path) if f.endswith('.csv')])
 
     # Processar arquivos CSV em paralelo com um número específico de threads
-    num_threads = min(32, len(csv_files))  # Ajuste o número de threads conforme necessário
+    num_threads = min(8, len(csv_files))  # Ajuste o número de threads conforme necessário
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         list(executor.map(lambda csv_file: process_single_csv_simples(csv_file, db), csv_files))
 

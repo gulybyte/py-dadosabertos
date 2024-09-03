@@ -37,8 +37,12 @@ def process_single_csv_socios(csv_file_path, db):
 
             # Verificar se os campos principais não estão vazios ou nulos
             if cnpj_basico and identificador_socio:
+                # Criar a chave primária única usando a combinação de cnpj_basico e identificador_socio
+                primary_key = f"{cnpj_basico}_{identificador_socio}"
+
                 # Adicionar documento para inserção em massa
                 documents_to_insert.append({
+                    "_id": primary_key,  # Definir a chave primária
                     "cnpj_basico": cnpj_basico,
                     "identificador_socio": identificador_socio,
                     "nome_socio": nome_socio,
@@ -70,7 +74,7 @@ def process_socios(category_folder_path, db):
     csv_files = sorted([os.path.join(category_folder_path, f) for f in os.listdir(category_folder_path) if f.endswith('.csv')])
 
     # Processar arquivos CSV em paralelo com um número específico de threads
-    num_threads = min(32, len(csv_files))  # Ajuste o número de threads conforme necessário
+    num_threads = min(8, len(csv_files))  # Ajuste o número de threads conforme necessário
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         list(executor.map(lambda csv_file: process_single_csv_socios(csv_file, db), csv_files))
 
